@@ -87,19 +87,56 @@ void makeSaveFile(std::string filePath,
     file.close();
 }
 
+void readPlaybackFile(std::string path, std::vector<uint8_t> &inputs, std::vector<int> &timepoints) {
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        std::cout << "Failed to read file at path: "  << path << std::endl;
+        return;
+    }
+    std::string line;
+    int keycode;
+    int timepoint;
+    int linepos;
+
+    while (std::getline(file, line)) {
+        if (line.empty()) break;
+        linepos = line.find("::");
+        try {
+            keycode = stoi(line.substr(0, linepos));
+            timepoint = stoi(line.substr(linepos+2, line.length()));
+        } catch (const std::invalid_argument &e) {
+            std::cerr << "Invalid line ->" << line << std::endl;
+            continue;
+        }
+
+        timepoints.push_back(timepoint);
+        inputs.push_back(keycode);
+    }
+}
+
 int main(int argc, char *argv[]) {
-    std::vector<KeySym> inputs;
-    std::vector<std::chrono::system_clock::time_point> timepoints;
+
     Display *dis;
     std::string dir;
-
     dis = XOpenDisplay(NULL);
-
     if (!dis) return 1;
+
+    if (argc > 1) {
+        std::vector<uint8_t> inputs;
+        std::vector<int> timestamps;
+        readPlaybackFile(argv[1], inputs, timestamps);
+
+        XCloseDisplay(dis);
+        return 0;
+    }
+
+
+    std::vector<KeySym> inputs;
+    std::vector<std::chrono::system_clock::time_point> timepoints;
+
     std::cout << "(ESC -> EXIT)" << std::endl;
     captureInput(inputs, timepoints, dis);
     XCloseDisplay(dis);
-
     std::cout << "Save path: ";
     std::cin >> dir;
 
