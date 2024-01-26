@@ -41,28 +41,25 @@ void captureInput(std::vector<KeySym>& inputs, std::vector<std::chrono::system_c
     
 }
 
-void playbackInput(const std::vector<KeySym> &inputs, const std::vector<std::chrono::system_clock::time_point>& timepoints, Display *dis) {
-    auto timer_start = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[0].time_since_epoch());
-    int timer_startms = static_cast<int>(timer_start.count());
+void playbackInput(const std::vector<uint8_t> &inputs, std::vector<int> &timepoints, Display *dis) {
+    int timer_old = 0;
     KeyCode key;
-        XEvent ev;
-        for (size_t i = 0; i < inputs.size(); ++i) {
-            timer_start = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[i+1].time_since_epoch());
-            key = XKeysymToKeycode(dis, inputs[i]);
+    XEvent ev;
 
-            std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int>(timer_start.count()) - timer_startms));
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        key = XKeysymToKeycode(dis, inputs[i]);
+        std::this_thread::sleep_for(std::chrono::milliseconds(timepoints[i] - timer_old));
+        // Windows should use SendInput() when i care to add support
+        XTestFakeKeyEvent(dis, key, false, 0); // UNCLICK the key because this works for some reason
+        XFlush(dis);
+        XTestFakeKeyEvent(dis, key, true, 0);
+        XFlush(dis);
+        XTestFakeKeyEvent(dis, key, false, 0);
+        XFlush(dis);
 
-            timer_startms = static_cast<int>(timer_start.count());
-            // Windows should use SendInput() when i care to add support
-            XTestFakeKeyEvent(dis, key, false, 0); // UNCLICK the key because this works for some reason
-            XFlush(dis);
-            XTestFakeKeyEvent(dis, key, true, 0);
-            XFlush(dis);
-            XTestFakeKeyEvent(dis, key, false, 0);
-            XFlush(dis);
-
-            std::cout << (key) << std::endl;
-        }
+        std::cout << (key) << std::endl;
+        timer_old = timepoints[i];
+    }
 }
 
 void makeSaveFile(std::string filePath, 
@@ -125,7 +122,7 @@ int main(int argc, char *argv[]) {
         std::vector<uint8_t> inputs;
         std::vector<int> timestamps;
         readPlaybackFile(argv[1], inputs, timestamps);
-
+        playbackInput(inputs, timestamps, dis);
         XCloseDisplay(dis);
         return 0;
     }
