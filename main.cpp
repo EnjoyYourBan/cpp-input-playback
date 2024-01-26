@@ -4,6 +4,7 @@
 #include <vector>
 #include <chrono>
 #include <thread>
+#include <algorithm>
 #include <X11/keysym.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/XTest.h>
@@ -22,7 +23,7 @@ void captureInput(std::vector<int> &inputs, std::vector<std::chrono::system_cloc
     XMapWindow(dis, window); // draw the window 
 
 
-    do {
+    for(;;) {
         XNextEvent(dis, &ev);
         if (ev.type != KeyPress && ev.type != KeyRelease)
             continue;
@@ -30,32 +31,35 @@ void captureInput(std::vector<int> &inputs, std::vector<std::chrono::system_cloc
         key = static_cast<int>(XLookupKeysym(&ev.xkey, 0));
         std::cout << "debug: " << key << std::endl;
 
+        if (key == XK_Escape) break;
         inputs.push_back(ev.type == KeyPress ? key : -key);
         timepoints.push_back(std::chrono::system_clock::now());
 
-    } while (key != XK_Escape); // loop exit on escape
+    } 
 
     XUnmapWindow(dis, window);
     
 }
 
-void playbackInput(const std::vector<int> &inputs, std::vector<int> &timepoints, Display *dis) {
+void playbackInput(const std::vector<int> &inputs, std::vector<int> &timepoints, Display *dis, bool loop) {
     int timer_old = 0;
     int key;
+    if (loop)
+        std::cout << "WARNING! Loop is active, press CTRL+C or close program to cancel.";
 
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        
+    for(;;) {
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            key = XKeysymToKeycode(dis, std::abs(inputs[i]));
+            std::this_thread::sleep_for(std::chrono::milliseconds(timepoints[i] - timer_old));
 
-        
-        key = XKeysymToKeycode(dis, std::abs(inputs[i]));
-        std::this_thread::sleep_for(std::chrono::milliseconds(timepoints[i] - timer_old));
+            // Windows should use SendInput() when i care to add support
+            XTestFakeKeyEvent(dis, key, (inputs[i] > 0), 0); // UNCLICK the key because this works for some reason
+            XFlush(dis);
 
-        // Windows should use SendInput() when i care to add support
-        XTestFakeKeyEvent(dis, key, (inputs[i] > 0), 0); // UNCLICK the key because this works for some reason
-        XFlush(dis);
+            timer_old = timepoints[i];
+        }
 
-        std::cout << (key) << std::endl;
-        timer_old = timepoints[i];
+        if (!loop) return;
     }
 }
 
@@ -109,16 +113,20 @@ void readPlaybackFile(std::string path, std::vector<int> &inputs, std::vector<in
 }
 
 int main(int argc, char *argv[]) {
+    std::vector<std::string> args(argv, argv+argc); 
     std::vector<int> inputs;
     Display *dis;
     std::string dir;
     dis = XOpenDisplay(NULL);
     if (!dis) return 1;
 
+
+
     if (argc > 1) {
         std::vector<int> timestamps;
+        bool loop = (std::find(args.begin(), args.end(), "-loop") != args.end());
         readPlaybackFile(argv[1], inputs, timestamps);
-        playbackInput(inputs, timestamps, dis);
+        playbackInput(inputs, timestamps, dis, loop);
         XCloseDisplay(dis);
         return 0;
     }
