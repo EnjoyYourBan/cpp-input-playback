@@ -1,11 +1,11 @@
 
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <chrono>
 #include <thread>
 #include <fcntl.h>
 #include <unistd.h>
-#include <termios.h>
 #include <X11/keysym.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/XTest.h>
@@ -41,7 +41,7 @@ void captureInput(std::vector<KeySym>& inputs, std::vector<std::chrono::system_c
     
 }
 
-void playbackInput(const std::vector<KeySym>& inputs, std::vector<std::chrono::system_clock::time_point>& timepoints, Display *dis) {
+void playbackInput(const std::vector<KeySym> &inputs, const std::vector<std::chrono::system_clock::time_point>& timepoints, Display *dis) {
     auto timer_start = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[0].time_since_epoch());
     int timer_startms = static_cast<int>(timer_start.count());
     KeyCode key;
@@ -65,20 +65,46 @@ void playbackInput(const std::vector<KeySym>& inputs, std::vector<std::chrono::s
         }
 }
 
+void makeSaveFile(std::string filePath, 
+                const std::vector<KeySym> &inputs, 
+                const std::vector<std::chrono::system_clock::time_point>& timepoints) {
+
+    std::ofstream file(filePath);
+
+    if (!file.is_open()) {
+        std::cout << "Unable to open file at file path." << std::endl;
+        return;
+    }
+
+    auto timer_start = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[0].time_since_epoch());
+    int timer_startms = static_cast<int>(timer_start.count());
+
+    for (size_t i = 0; i < inputs.size(); ++i) {
+        timer_start = std::chrono::duration_cast<std::chrono::milliseconds>(timepoints[i+1].time_since_epoch());
+        file << inputs[i] << "::" << static_cast<int>(timer_start.count()) - timer_startms << std::endl;
+    }
+
+    file.close();
+}
+
 int main(int argc, char *argv[]) {
     std::vector<KeySym> inputs;
     std::vector<std::chrono::system_clock::time_point> timepoints;
     Display *dis;
+    std::string dir;
+
     dis = XOpenDisplay(NULL);
 
     if (!dis) return 1;
     std::cout << "(ESC -> EXIT)" << std::endl;
     captureInput(inputs, timepoints, dis);
-
-    std::cout << "\ndebug output:" << std::endl;
-    
-    playbackInput(inputs, timepoints, dis);
-
     XCloseDisplay(dis);
+
+    std::cout << "Save path: ";
+    std::cin >> dir;
+
+    makeSaveFile(dir, inputs, timepoints);
+
     return 0;
+
 }
